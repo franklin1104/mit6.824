@@ -18,6 +18,28 @@ type ExampleArgs struct {
 	X int
 }
 
+type CallArgs struct{
+	Pid int
+}
+
+type CallReply struct{
+	FileName string
+	Type string
+	TaskNum int
+	NReduce int
+}
+
+type DoneArgs struct{
+	Type string
+	TaskNum int
+	MapFiles []string
+	ReduceFile string
+	Pid int
+}
+type DoneReply struct {
+	DoneConfirm bool
+}
+
 type ExampleReply struct {
 	Y int
 }
