@@ -4,7 +4,6 @@ import "../labrpc"
 import "crypto/rand"
 import "math/big"
 
-
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
@@ -24,7 +23,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	return ck
 }
 
-//
+// Get
 // fetch the current value for a key.
 // returns "" if the key does not exist.
 // keeps trying forever in the face of all other errors.
@@ -39,10 +38,22 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 
 	// You will have to modify this function.
+	args := GetArgs{Key: key}
+	var reply GetReply
+	for i, _ := range ck.servers {
+		ok := ck.servers[i].Call("KVServer.Get", &args, &reply)
+		if ok {
+			if reply.Err == "" {
+				return reply.Value
+			} else if reply.Err == ErrNoKey {
+				break
+			}
+		}
+	}
 	return ""
 }
 
-//
+// PutAppend
 // shared by Put and Append.
 //
 // you can send an RPC with code like this:
@@ -54,6 +65,16 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+	args := PutAppendArgs{Key: key, Value: value, Op: op}
+	var reply PutAppendReply
+	for i, _ := range ck.servers {
+		ok := ck.servers[i].Call("KVServer.PutAppend", &args, &reply)
+		if ok {
+			if reply.Err == "" || reply.Err == ErrNoKey {
+				return
+			}
+		}
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {
