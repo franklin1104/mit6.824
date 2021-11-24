@@ -68,11 +68,13 @@ func (kv *KVServer) get(args *GetArgs) string {
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
-	ok, err, value := kv.opt(args)
+	ok, err, value := kv.opt(*args)
 	if !ok {
+		//fmt.Println( "Get Err:" + err)
 		reply.Err = err
 		return
 	}
+	//fmt.Println("leader handle op get")
 	reply.Value = value.(string)
 	return
 }
@@ -92,10 +94,13 @@ func (kv *KVServer) putAppend(args *PutAppendArgs) {
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-	ok, err, _ := kv.opt(args)
+	ok, err, _ := kv.opt(*args)
 	if !ok {
+		//fmt.Println("PutAppend Err:" + err)
 		reply.Err = err
+		return
 	}
+	//fmt.Println("leader handle op put append")
 }
 
 // Kill
@@ -171,6 +176,8 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	// call labgob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
 	labgob.Register(Op{})
+	labgob.Register(PutAppendArgs{})
+	labgob.Register(GetArgs{})
 
 	kv := new(KVServer)
 	kv.me = me
@@ -178,10 +185,11 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	// You may need initialization code here.
 
-	kv.applyCh = make(chan raft.ApplyMsg)
+	kv.applyCh = make(chan raft.ApplyMsg, 10000)
+	kv.kvs = make(map[string]string)
+	kv.killCh = make(chan bool)
+
+	go kv.eventLoop()
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-
-	// You may need initialization code here.
-
 	return kv
 }
