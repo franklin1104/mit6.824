@@ -2,6 +2,7 @@ package kvraft
 
 import (
 	"../labrpc"
+	"sync/atomic"
 	"time"
 )
 import "crypto/rand"
@@ -10,6 +11,8 @@ import "math/big"
 type Clerk struct {
 	servers  []*labrpc.ClientEnd
 	leaderId int
+	msgId    int64
+	me       int64
 	// You will have to modify this struct.
 }
 
@@ -24,6 +27,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	ck.leaderId = 0
+	ck.msgId = 0
+	ck.me = nrand()
 	// You'll have to add code here.
 	return ck
 }
@@ -72,7 +77,13 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
-	args := PutAppendArgs{Key: key, Value: value, Op: op}
+	args := PutAppendArgs{
+		Key:   key,
+		Value: value,
+		Op:    op,
+		MsgId: atomic.AddInt64(&ck.msgId, 1),
+		CliId: ck.me,
+	}
 	for i := 0; i < 8000; i++ {
 		reply := PutAppendReply{}
 		ok := ck.servers[ck.leaderId].Call("KVServer.PutAppend", &args, &reply)

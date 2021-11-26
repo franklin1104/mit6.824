@@ -39,9 +39,13 @@ type KVServer struct {
 	// Your definitions here.
 	killCh chan bool
 	kvs    map[string]string
+	msgIds map[int64]int64
 }
 
-func (kv *KVServer) opt(req interface{}) (bool, Err, interface{}) {
+func (kv *KVServer) opt(cliId int64, msgId int64, req interface{}) (bool, Err, interface{}) {
+	if msgId > 0 && kv.isRepeated(cliId, msgId, false) {
+		return true, "", nil
+	}
 	op := Op{
 		Req: req,
 		Ch:  make(chan interface{}),
@@ -68,7 +72,7 @@ func (kv *KVServer) get(args *GetArgs) string {
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
-	ok, err, value := kv.opt(*args)
+	ok, err, value := kv.opt(-1, -1, *args)
 	if !ok {
 		//fmt.Println( "Get Err:" + err)
 		reply.Err = err
@@ -94,13 +98,10 @@ func (kv *KVServer) putAppend(args *PutAppendArgs) {
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-	ok, err, _ := kv.opt(*args)
+	ok, err, _ := kv.opt(args.CliId, args.MsgId, *args)
 	if !ok {
-		//fmt.Println("PutAppend Err:" + err)
 		reply.Err = err
-		return
 	}
-	//fmt.Println("leader handle op put append")
 }
 
 // Kill
@@ -134,7 +135,9 @@ func (kv *KVServer) onApply(applyMsg raft.ApplyMsg) {
 	op := applyMsg.Command.(Op)
 	var resp interface{}
 	if args, ok := op.Req.(PutAppendArgs); ok {
-		kv.putAppend(&args)
+		if !kv.isRepeated(args.CliId, args.MsgId, true) {
+			kv.putAppend(&args)
+		}
 		resp = true
 	} else {
 		args := op.Req.(GetArgs)
@@ -144,6 +147,21 @@ func (kv *KVServer) onApply(applyMsg raft.ApplyMsg) {
 	case op.Ch <- resp:
 	default:
 	}
+}
+
+func (kv *KVServer) isRepeated(cliId int64, msgId int64, update bool) bool {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	lastId, ok := kv.msgIds[cliId]
+	if ok && lastId >= msgId {
+		return true
+	} else {
+		if update {
+			kv.msgIds[cliId] = msgId
+		}
+		return false
+	}
+
 }
 
 func (kv *KVServer) eventLoop() {
@@ -187,6 +205,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.applyCh = make(chan raft.ApplyMsg, 10000)
 	kv.kvs = make(map[string]string)
+	kv.msgIds = make(map[int64]int64)
 	kv.killCh = make(chan bool)
 
 	go kv.eventLoop()
