@@ -58,12 +58,14 @@ func (kv *KVServer) opt(cliId int64, msgId int64, req interface{}) (bool, Err, i
 	case resp := <-op.Ch:
 		return true, "", resp
 	case <-time.After(time.Millisecond * 1000):
-		return false, ErrNoKey, nil
+		//fmt.Println("out of time")
+		return false, ErrTimeout, nil
 	}
 }
 
 func (kv *KVServer) get(args *GetArgs) string {
 	value, ok := kv.kvs[args.Key]
+	//fmt.Println(kv.me, "on get", args.Key, ":", value, ":", ok)
 	if !ok {
 		return ""
 	}
