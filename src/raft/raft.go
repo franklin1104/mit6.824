@@ -827,7 +827,6 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 				DPrintf("[%s]: Id %d Term %d State %s\t||\tinvalid prevLogIndex %d for index %d"+
 					" peer %d\n", name, rf.me, rf.currentTerm, state2name(rf.state), prevLogIndex, index, i)
 			}
-			prevLogTerm := rf.log[prevLogIndex-rf.getFirstLog().Index].Term
 
 			if prevLogIndex < rf.getFirstLog().Index {
 				args := InstallSnapshotArgs{
@@ -861,6 +860,7 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 					return
 				}
 			} else {
+				prevLogTerm := rf.log[prevLogIndex-rf.getFirstLog().Index].Term
 				entries := make([]LogEntry, 0)
 				if nextIndex < index+1 {
 					entries = rf.log[nextIndex-rf.getFirstLog().Index : index+1-rf.getFirstLog().Index]
