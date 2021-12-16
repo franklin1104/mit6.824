@@ -306,6 +306,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.persist()
 		}
 
+		// if nextIndex <= snapshotIndex, need to send a snapshot
 		if args.PrevLogIndex < rf.getFirstLog().Index {
 			reply.Term = rf.currentTerm
 			reply.Success = true
@@ -528,9 +529,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// Your code here (2B).
 	if term, isLeader = rf.GetState(); isLeader {
 		rf.mu.Lock()
-		logEntry := LogEntry{Command: command, Term: rf.currentTerm}
+		index = rf.getLastLog().Index + 1
+		logEntry := LogEntry{Command: command, Term: rf.currentTerm, Index: index}
 		rf.log = append(rf.log, logEntry)
-		index = len(rf.log) - 1
 		DPrintf("[Start]: Id %d Term %d State %s\t||\treplicate the command to Log index %d\n",
 			rf.me, rf.currentTerm, state2name(rf.state), index)
 		nReplica := 1
@@ -752,7 +753,7 @@ func (rf *Raft) startElection() {
 						rf.switchTo(Leader)
 						rf.leaderId = rf.me
 						for i := 0; i < len(rf.peers); i++ {
-							rf.nextIndex[i] = rf.getLastLog().Index - 1
+							rf.nextIndex[i] = rf.getLastLog().Index + 1
 						}
 						go rf.broadcastHeartbeat()
 						rf.persist()
@@ -827,7 +828,7 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 				DPrintf("[%s]: Id %d Term %d State %s\t||\tinvalid prevLogIndex %d for index %d"+
 					" peer %d\n", name, rf.me, rf.currentTerm, state2name(rf.state), prevLogIndex, index, i)
 			}
-
+			//fmt.Println(prevLogIndex, ":", rf.getFirstLog().Index)
 			if prevLogIndex < rf.getFirstLog().Index {
 				args := InstallSnapshotArgs{
 					Term:              term,
@@ -851,6 +852,7 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 				}
 				rf.mu.Unlock()
 
+				rf.mu.Lock()
 				if args.Term < reply.Term {
 					rf.currentTerm = reply.Term
 					rf.votedFor = -1
@@ -859,6 +861,7 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 					rf.mu.Unlock()
 					return
 				}
+				rf.mu.Unlock()
 			} else {
 				prevLogTerm := rf.log[prevLogIndex-rf.getFirstLog().Index].Term
 				entries := make([]LogEntry, 0)
@@ -903,7 +906,8 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 					rf.mu.Lock()
 					DPrintf("[%s]: Id %d Term %d State %s\t||\tAppendEntries RPC for index %d"+
 						" is rejected by peer %d\n", name, rf.me, rf.currentTerm, state2name(rf.state), index, i)
-
+					//fmt.Printf("[%s]: Id %d Term %d State %s\t||\tAppendEntries RPC for index %d"+
+					//	" is rejected by peer %d\n", name, rf.me, rf.currentTerm, state2name(rf.state), index, i)
 					if args.Term < reply.Term {
 						rf.currentTerm = reply.Term
 						rf.votedFor = -1
@@ -934,6 +938,8 @@ func (rf *Raft) broadcastAppendEntries(index int, term int, commitIndex int, nRe
 					rf.mu.Lock()
 					DPrintf("[%s]: Id %d Term %d State %s\t||\tsend AppendEntries RPC for index %d to peer %d success\n",
 						name, rf.me, rf.currentTerm, state2name(rf.state), index, i)
+					//fmt.Printf("[%s]: Id %d Term %d State %s\t||\tsend AppendEntries RPC for index %d to peer %d success\n",
+					//	name, rf.me, rf.currentTerm, state2name(rf.state), index, i)
 					if rf.nextIndex[i] < index+1 {
 						rf.nextIndex[i] = index + 1
 						rf.matchIndex[i] = index
